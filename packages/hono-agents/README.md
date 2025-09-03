@@ -64,6 +64,13 @@ app.use(
 export default app;
 ```
 
+### Built-in observability
+
+The middleware exposes a couple of convenience endpoints:
+
+- `GET /healthz` returns basic uptime information
+- `GET /metrics` returns Prometheus-style metrics including request latency histograms
+
 ## Configuration
 
 To properly configure your Cloudflare Workers project to use agents, add bindings to your `wrangler.jsonc` file:

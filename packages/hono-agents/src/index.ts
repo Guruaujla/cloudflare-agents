@@ -4,6 +4,12 @@ import type { Context, Env } from "hono";
 import { env } from "hono/adapter";
 import { createMiddleware } from "hono/factory";
 
+const startTime = Date.now();
+const latencyBuckets = [50, 100, 250, 500, 1000, 2000];
+const latencyHistogram = latencyBuckets.map(() => 0);
+let latencySum = 0;
+let totalRequests = 0;
+
 /**
  * Configuration options for the Cloudflare Agents middleware
  */
@@ -80,5 +86,45 @@ async function handleHttpRequest<E extends Env>(
   c: Context<E>,
   options?: AgentOptions<E>
 ) {
-  return routeAgentRequest(c.req.raw, env(c) satisfies Env, options);
+  const url = new URL(c.req.url);
+
+  if (url.pathname === "/healthz") {
+    const uptimeSeconds = Math.floor((Date.now() - startTime) / 1000);
+    return new Response(JSON.stringify({ uptime: uptimeSeconds }), {
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+
+  if (url.pathname === "/metrics") {
+    const uptimeSeconds = Math.floor((Date.now() - startTime) / 1000);
+    let metrics = `uptime_seconds ${uptimeSeconds}\n`;
+    let cumulative = 0;
+    latencyBuckets.forEach((bucket, i) => {
+      cumulative += latencyHistogram[i];
+      metrics += `request_latency_bucket{le="${bucket}"} ${cumulative}\n`;
+    });
+    metrics += `request_latency_bucket{le="+Inf"} ${totalRequests}\n`;
+    metrics += `request_latency_sum ${latencySum}\n`;
+    metrics += `request_latency_count ${totalRequests}`;
+    return new Response(metrics, {
+      headers: { "Content-Type": "text/plain" }
+    });
+  }
+
+  const start = Date.now();
+  const response = await routeAgentRequest(
+    c.req.raw,
+    env(c) satisfies Env,
+    options
+  );
+  const duration = Date.now() - start;
+  latencySum += duration;
+  totalRequests++;
+  for (let i = 0; i < latencyBuckets.length; i++) {
+    if (duration <= latencyBuckets[i]) {
+      latencyHistogram[i]++;
+      break;
+    }
+  }
+  return response;
 }

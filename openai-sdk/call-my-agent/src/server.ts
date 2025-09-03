@@ -10,6 +10,7 @@ import {
 
 type Env = {
   MyAgent: AgentNamespace<MyAgent>;
+  REALTIMEKIT_E2EE?: string;
 };
 
 export class MyAgent extends Agent<Env> {
@@ -31,7 +32,8 @@ export class MyAgent extends Agent<Env> {
       });
 
       const session = new RealtimeSession(agent, {
-        transport: twilioTransportLayer
+        transport: twilioTransportLayer,
+        e2ee: ctx.env?.REALTIMEKIT_E2EE === "true"
       });
 
       await session.connect({
